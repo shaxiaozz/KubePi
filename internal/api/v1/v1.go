@@ -423,6 +423,7 @@ func AddV1Route(app iris.Party) {
 
 	session.Install(v1Party)
 	mfa.Install(v1Party)
+	sso.Install(v1Party)
 	v1Party.Use(langHandler())
 	v1Party.Use(pageHandler())
 
@@ -444,7 +445,6 @@ func AddV1Route(app iris.Party) {
 	chart.Install(authParty)
 	webkubectl.Install(authParty, v1Party)
 	ldap.Install(authParty)
-	sso.Install(authParty)
 	imagerepo.Install(authParty)
 	file.Install(authParty)
 }

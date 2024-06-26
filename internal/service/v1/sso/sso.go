@@ -15,7 +15,7 @@ type Service interface {
 	List(options common.DBOptions) ([]v1Sso.Sso, error)
 	Create(sso *v1Sso.Sso, options common.DBOptions) error
 	Update(id string, sso *v1Sso.Sso, options common.DBOptions) error
-	Switch(options common.DBOptions) bool
+	Status(options common.DBOptions) bool
 }
 
 func NewService() Service {
@@ -87,7 +87,7 @@ func (s *service) List(options common.DBOptions) ([]v1Sso.Sso, error) {
 	return sso, nil
 }
 
-func (s *service) Switch(options common.DBOptions) bool {
+func (s *service) Status(options common.DBOptions) bool {
 	db := s.GetDB(options)
 	sso := make([]v1Sso.Sso, 0)
 	if err := db.All(&sso); err != nil {

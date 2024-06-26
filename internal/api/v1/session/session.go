@@ -59,17 +59,11 @@ func NewHandler() *Handler {
 
 func (h *Handler) IsLogin() iris.Handler {
 	return func(ctx *context.Context) {
-		ssoSwitch := h.ssoService.Switch(common.DBOptions{})
 		session := server.SessionMgr.Start(ctx)
 		loginUser := session.Get("profile")
 		if loginUser == nil {
 			ctx.StatusCode(iris.StatusOK)
-			responseData := map[string]interface{}{
-				"data":       false,
-				"sso_switch": ssoSwitch,
-				"success":    true,
-			}
-			ctx.JSON(responseData)
+			ctx.Values().Set("data", false)
 			return
 		}
 		p, ok := loginUser.(UserProfile)

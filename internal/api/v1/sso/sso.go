@@ -80,9 +80,9 @@ func (h *Handler) TestConnect() iris.Handler {
 	}
 }
 
-func (h *Handler) SwitchSso() iris.Handler {
+func (h *Handler) StatusSso() iris.Handler {
 	return func(ctx *context.Context) {
-		if ssoSwitch := h.ssoService.Switch(common.DBOptions{}); !ssoSwitch {
+		if ssoSwitch := h.ssoService.Status(common.DBOptions{}); !ssoSwitch {
 			ctx.Values().Set("data", false)
 			return
 		}
@@ -97,5 +97,5 @@ func Install(parent iris.Party) {
 	sp.Post("/", handler.AddSso())
 	sp.Put("/", handler.UpdateSso())
 	sp.Post("/test/connect", handler.TestConnect())
-	sp.Get("/switch", handler.SwitchSso())
+	sp.Get("/status", handler.StatusSso())
 }
