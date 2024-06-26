@@ -14,6 +14,9 @@ export function updateSso(data){
   return put(`${baseUrl}`, data)
 }
 
+export function isSso() {
+  return get(`${baseUrl}/status`)
+}
 
 export function testConnect(data) {
   return post(`${baseUrl}/test/connect`, data)

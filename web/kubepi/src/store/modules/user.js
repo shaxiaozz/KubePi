@@ -1,4 +1,5 @@
 import {login, isLogin, logout, getCurrentUser, updateProfile} from "@/api/auth"
+import {isSso} from "@/api/sso"
 import {resetRouter} from "@/router"
 import {getLanguage, setLanguage} from "@/i18n"
 
@@ -68,8 +69,8 @@ const actions = {
             if (state.sso) {
                 resolve(false)
             }
-            isLogin().then((data) => {
-                if (data.sso_switch) {
+            isSso().then(data => {
+                if (data.data) {
                     commit("SSO")
                     resolve(true)
                 } else {

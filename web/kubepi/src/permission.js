@@ -35,9 +35,7 @@ const generateRoutes = async (to, from, next) => {
 router.beforeEach(async (to, from, next) => {
     NProgress.start()
     const isSso = await store.dispatch("user/isSso")
-    console.log("sso status:",isSso)
     const isLogin = await store.dispatch("user/isLogin")
-    console.log("login status",isLogin)
     if (isLogin) {
         if (to.path === "/login") {
             next({path: "/"})
@@ -45,6 +43,13 @@ router.beforeEach(async (to, from, next) => {
         }
         await generateRoutes(to, from, next)
     } else {
+        // 跳转至sso callback地址
+        if(isSso) {
+            //next(`https://www.google.com.hk/`)
+            window.location.href = 'https://www.google.com.hk/';
+            NProgress.done()
+        }
+
         /* has not login*/
         if (whiteList.indexOf(to.path) !== -1) {
             // in the free login whitelist, go directly
