@@ -64,8 +64,12 @@ func (h *Handler) IsLogin() iris.Handler {
 		loginUser := session.Get("profile")
 		if loginUser == nil {
 			ctx.StatusCode(iris.StatusOK)
-			ctx.Values().Set("data", false)
-			ctx.Values().Set("sso.switch", ssoSwitch)
+			responseData := map[string]interface{}{
+				"data":       false,
+				"sso_switch": ssoSwitch,
+				"success":    true,
+			}
+			ctx.JSON(responseData)
 			return
 		}
 		p, ok := loginUser.(UserProfile)

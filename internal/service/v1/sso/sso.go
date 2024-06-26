@@ -93,6 +93,11 @@ func (s *service) Switch(options common.DBOptions) bool {
 	if err := db.All(&sso); err != nil {
 		return false
 	}
+
+	if len(sso) == 0 {
+		return false
+	}
+
 	return sso[0].Enable
 }
 

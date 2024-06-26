@@ -34,7 +34,10 @@ const generateRoutes = async (to, from, next) => {
 //路由前置钩子，根据实际需求修改
 router.beforeEach(async (to, from, next) => {
     NProgress.start()
+    const isSso = await store.dispatch("user/isSso")
+    console.log("sso status:",isSso)
     const isLogin = await store.dispatch("user/isLogin")
+    console.log("login status",isLogin)
     if (isLogin) {
         if (to.path === "/login") {
             next({path: "/"})
