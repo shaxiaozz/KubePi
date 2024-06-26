@@ -109,6 +109,18 @@ const UserManagement = {
       meta: {
         title: "business.user.ldap",
       },
+    },
+    {
+      path: "sso",
+      component: () => import("@/business/user-management/sso"),
+      name: "SSO",
+      requirePermission: {
+        resource: "sso",
+        verb: "list"
+      },
+      meta: {
+        title: "business.user.sso",
+      },
     }
 
   ]

@@ -4,6 +4,7 @@ import (
 	goContext "context"
 	"errors"
 	"fmt"
+	"github.com/KubeOperator/kubepi/internal/service/v1/sso"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ type Handler struct {
 	clusterService     cluster.Service
 	rolebindingService rolebinding.Service
 	ldapService        ldap.Service
+	ssoService         sso.Service
 	jwtSigner          *jwt.Signer
 }
 
@@ -50,17 +52,20 @@ func NewHandler() *Handler {
 		roleService:        role.NewService(),
 		rolebindingService: rolebinding.NewService(),
 		ldapService:        ldap.NewService(),
+		ssoService:         sso.NewService(),
 		jwtSigner:          jwt.NewSigner(jwt.HS256, server.Config().Spec.Jwt.Key, jwtMaxAge),
 	}
 }
 
 func (h *Handler) IsLogin() iris.Handler {
 	return func(ctx *context.Context) {
+		ssoSwitch := h.ssoService.Switch(common.DBOptions{})
 		session := server.SessionMgr.Start(ctx)
 		loginUser := session.Get("profile")
 		if loginUser == nil {
 			ctx.StatusCode(iris.StatusOK)
 			ctx.Values().Set("data", false)
+			ctx.Values().Set("sso.switch", ssoSwitch)
 			return
 		}
 		p, ok := loginUser.(UserProfile)

@@ -16,7 +16,8 @@ module.exports = {
                 target: 'http://0.0.0.0:4400',
             },
             '/kubepi/api': {
-                target: 'http://0.0.0.0:2019',
+                //target: 'http://0.0.0.0:2019',
+                target: 'http://192.168.56.101',
                 ws: true,
                 secure: false,
             },
