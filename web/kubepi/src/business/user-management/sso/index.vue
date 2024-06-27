@@ -23,6 +23,11 @@
           <el-form-item style="width: 100%" :label="$t('business.user.sso_client_secret')" prop="clientSecret">
             <el-input type="password" v-model="form.clientSecret"></el-input>
           </el-form-item>
+          <el-form-item>
+            <div style="font-size: 12px;color: #4E5051;">
+              {{ $t("business.user.sso_helper") }}
+            </div>
+          </el-form-item>
           <el-form-item style="width: 100%" prop="enable">
             <el-checkbox v-model="form.enable">{{ $t("commons.enable.true") }}</el-checkbox>
           </el-form-item>

@@ -6,7 +6,7 @@ import Layout from "@/business/app-layout/horizontal-layout"
 
 NProgress.configure({showSpinner: false}) // NProgress Configuration
 
-const whiteList = ["/login"] // no redirect whitelist
+const whiteList = ["/login","/sso"] // no redirect whitelist
 
 const generateRoutes = async (to, from, next) => {
     const hasPermissions = store.getters.isAdmin || Object.keys(store.getters.permissions).length > 0
@@ -36,6 +36,7 @@ router.beforeEach(async (to, from, next) => {
     NProgress.start()
     const isSso = await store.dispatch("user/isSso")
     const isLogin = await store.dispatch("user/isLogin")
+
     if (isLogin) {
         if (to.path === "/login") {
             next({path: "/"})
@@ -43,18 +44,15 @@ router.beforeEach(async (to, from, next) => {
         }
         await generateRoutes(to, from, next)
     } else {
-        // 跳转至sso callback地址
-        if(isSso) {
-            //next(`https://www.google.com.hk/`)
-            window.location.href = 'https://www.google.com.hk/';
-            NProgress.done()
-        }
-
         /* has not login*/
         if (whiteList.indexOf(to.path) !== -1) {
-            // in the free login whitelist, go directly
+             // in the free login whitelist, go directly
             next()
-        } else {
+        } else if (isSso) {
+            next(`/sso`)
+            NProgress.done()
+        }
+        else {
             // other pages that do not have permission to access are redirected to the login page.
             next(`/login?redirect=${to.path}`)
             NProgress.done()

@@ -204,6 +204,7 @@ const message = {
             sso_client_id: "客户端ID",
             sso_client_secret: "客户端密钥",
             sso_test_result: "测试SSO连接成功",
+            sso_helper: "注意：如果开启了SSO，想通过本地账号登录时，请直接访问 \"http(s)://host/kubepi/login\"",
             test_result: "连接成功,匹配到{count}个用户",
             test_login: "测试登录",
             login_success: "测试登录成功",
