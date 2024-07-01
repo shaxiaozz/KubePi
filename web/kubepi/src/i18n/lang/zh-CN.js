@@ -109,6 +109,10 @@ const message = {
             mfa_helper: "使用 MFA 验证器应用扫描以下二维码，获取6位验证码",
             mfa_login_helper: "请输入MFA验证器的6位验证码",
         },
+        sso: {
+            title: "SSO 跳转中",
+            
+        },
     },
     business: {
         cluster: {

@@ -109,6 +109,10 @@ const message = {
             mfa_helper: "Scan the QR code below with the MFA Authenticator app to get a 6-digit verification code",
             mfa_login_helper:"Please enter 6-digit verification for MFA Authenticator",
         },
+        sso: {
+            title: "SSO Redirecting",
+            
+        },
     },
     business: {
         cluster: {
