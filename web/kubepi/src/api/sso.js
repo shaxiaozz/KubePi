@@ -18,6 +18,10 @@ export function isSso() {
   return get(`${baseUrl}/status`)
 }
 
+export function ssoCallBack() {
+  return (`${baseUrl}/status`)
+}
+
 export function testConnect(data) {
   return post(`${baseUrl}/test/connect`, data)
 }
