@@ -1,10 +1,7 @@
 package sso
 
 import (
-	"github.com/KubeOperator/kubepi/internal/api/v1/user"
 	v1Sso "github.com/KubeOperator/kubepi/internal/model/v1/sso"
-	v1User "github.com/KubeOperator/kubepi/internal/model/v1/user"
-	"github.com/KubeOperator/kubepi/internal/server"
 	"github.com/KubeOperator/kubepi/internal/service/v1/common"
 	"github.com/KubeOperator/kubepi/internal/service/v1/sso"
 	"github.com/kataras/iris/v12"
@@ -79,11 +76,12 @@ func (h *Handler) LoginSso() iris.Handler {
 
 		// 根据协议设置重定向URL
 		r := ctx.Request()
+		path := strings.Replace(ctx.Path(), "login", "callback", -1)
 		redirectURL := ""
 		if strings.HasPrefix(strings.ToLower(r.Proto), "https") {
-			redirectURL = "https://" + r.Host + "/callback"
+			redirectURL = "https://" + r.Host + path
 		} else if strings.HasPrefix(strings.ToLower(r.Proto), "http") {
-			redirectURL = "http://" + r.Host + "/callback"
+			redirectURL = "http://" + r.Host + path
 		}
 
 		// 目前只支持OpenID
@@ -113,24 +111,19 @@ func (h *Handler) LoginSso() iris.Handler {
 
 func (h *Handler) CallbackSso() iris.Handler {
 	return func(ctx *context.Context) {
-		var req user.User
+		r := ctx.Request()
 		language := ctx.GetHeader("Accept-Language")
 		if strings.Contains(language, "zh-CN") {
-			req.Language = "zh-CN"
+			language = "zh-CN"
 		} else {
-			req.Language = "en-US"
+			language = "en-US"
 		}
-
-		//tx
-		tx, err := server.DB().Begin(true)
-		_ = tx.Rollback()
-		if err != nil {
+		code := r.URL.Query().Get("code")
+		if _, err := h.ssoService.OpenID(&v1Sso.OpenID{IsConfig: false, Code: code, Language: language}); err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err.Error())
 			return
 		}
-		req.Type = v1User.LOCAL
-		ctx.Values().Set("data", &req.User)
 	}
 }
 
