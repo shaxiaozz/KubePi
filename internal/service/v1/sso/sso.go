@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	v1 "github.com/KubeOperator/kubepi/internal/model/v1"
+	v1Role "github.com/KubeOperator/kubepi/internal/model/v1/role"
 	v1Sso "github.com/KubeOperator/kubepi/internal/model/v1/sso"
+	v1User "github.com/KubeOperator/kubepi/internal/model/v1/user"
+	"github.com/KubeOperator/kubepi/internal/server"
 	"github.com/KubeOperator/kubepi/internal/service/v1/common"
+	"github.com/KubeOperator/kubepi/internal/service/v1/rolebinding"
 	"github.com/KubeOperator/kubepi/internal/service/v1/user"
 	ssoClient "github.com/KubeOperator/kubepi/pkg/util/sso"
 	"github.com/asdine/storm/v3"
@@ -32,7 +37,8 @@ func NewService() Service {
 
 type service struct {
 	common.DefaultDBService
-	userService user.Service
+	userService        user.Service
+	roleBindingService rolebinding.Service
 }
 
 func (s *service) TestConnect(sso *v1Sso.Sso) error {
@@ -150,26 +156,68 @@ func (s *service) OpenID(openid *v1Sso.OpenID) (*oauth2.Config, error) {
 	if err != nil {
 		return nil, errors.New("获取用户信息失败: " + err.Error())
 	}
+	// 获取用户名
+	var claims struct {
+		PreferredUsername string `json:"preferred_username"`
+	}
+	if err := userInfo.Claims(&claims); err != nil {
+		return nil, err
+	}
 
 	localUser, err := s.userService.GetByNameOrEmail(userInfo.Email, openid.Options)
 	if err != nil {
 		if errors.Is(err, storm.ErrNotFound) {
-			// 创建本地账号，密码默认设置为`@=7kvi-$l*Pj+,s`，用户角色默认为ReadOnly，默认不开启MFA
-			//userProfile := &v1User.User{
-			//	NickName:     "",
-			//	Email:        "",
-			//	Language:     "zh-CN",
-			//	IsAdmin:      false,
-			//	Authenticate: v1User.Authenticate{},
-			//	Type:         v1User.LOCAL,
-			//	Mfa:          v1User.Mfa{Enable: false},
-			//}
-			//s.userService.Create()
-			fmt.Println(localUser.Name + "用户不存在")
+			// 创建本地账号，密码默认设置为`@=7kvi-$l*Pj+,s`，默认不开启MFA
+			userProfile := &v1User.User{
+				BaseModel: v1.BaseModel{
+					ApiVersion: "v1",
+					Kind:       "User",
+				},
+				Metadata: v1.Metadata{
+					Name: claims.PreferredUsername,
+				},
+				NickName: claims.PreferredUsername,
+				Email:    userInfo.Email,
+				Language: openid.Language,
+				IsAdmin:  false,
+				Authenticate: v1User.Authenticate{
+					Password: `@=7kvi-$l*Pj+,s`,
+				},
+				Type: v1User.LOCAL,
+				Mfa: v1User.Mfa{
+					Enable: false,
+				},
+			}
+			tx, _ := server.DB().Begin(true)
+			if err := s.userService.Create(userProfile, common.DBOptions{DB: tx}); err != nil {
+				_ = tx.Rollback()
+				return nil, err
+			}
+
+			// 用户角色默认为ReadOnly
+			binding := v1Role.Binding{
+				BaseModel: v1.BaseModel{
+					Kind:       "RoleBind",
+					ApiVersion: "v1",
+					CreatedBy:  "admin",
+				},
+				Metadata: v1.Metadata{
+					Name: fmt.Sprintf("role-binding-%s-%s", "ReadOnly", claims.PreferredUsername),
+				},
+				Subject: v1Role.Subject{
+					Kind: "User",
+					Name: claims.PreferredUsername,
+				},
+				RoleRef: "ReadOnly",
+			}
+			if err := s.roleBindingService.CreateRoleBinding(&binding, common.DBOptions{DB: tx}); err != nil {
+				_ = tx.Rollback()
+				return nil, err
+			}
+			fmt.Println("SSO用户" + localUser.Name + "不存在，已自动创建本地账号")
 			return nil, nil
 		}
 		return nil, err
 	}
-
 	return nil, err
 }

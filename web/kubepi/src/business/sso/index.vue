@@ -29,7 +29,7 @@
 </template>
 
 <script>
-import { ssoCallBack } from "@/api/sso"
+import { ssoLogin } from "@/api/sso"
 
 export default {
   name: "Login",
@@ -55,8 +55,7 @@ export default {
   methods: {
     redirectSso () {
       clearInterval(this.intervalId)
-      console.log("重定向到 SSO 认证界面",window.location.protocol+window.location.host+'/kubepi'+ssoCallBack());
-      window.location.href = '/kubepi'+ssoCallBack()
+      window.location.href = '/kubepi'+ssoLogin()
       // 这里可以添加重定向逻辑，例如：
       //window.location.href = "https://www.google.com.hk/";
     },
@@ -66,7 +65,7 @@ export default {
     },
     confirm () {
       clearInterval(this.intervalId)
-      window.location.href = '/login'
+      window.location.href = '/kubepi'+ssoLogin()
     },
   },
   mounted() {

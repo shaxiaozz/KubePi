@@ -22,5 +22,6 @@ type OpenID struct {
 	IssuerURL    string
 	IsConfig     bool
 	Code         string
+	Language     string
 	Options      common.DBOptions
 }

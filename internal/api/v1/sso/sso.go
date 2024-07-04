@@ -1,8 +1,6 @@
 package sso
 
 import (
-	"fmt"
-	"github.com/KubeOperator/kubepi/internal/api/v1/session"
 	"github.com/KubeOperator/kubepi/internal/api/v1/user"
 	v1Sso "github.com/KubeOperator/kubepi/internal/model/v1/sso"
 	v1User "github.com/KubeOperator/kubepi/internal/model/v1/user"
@@ -116,8 +114,13 @@ func (h *Handler) LoginSso() iris.Handler {
 func (h *Handler) CallbackSso() iris.Handler {
 	return func(ctx *context.Context) {
 		var req user.User
-		u := ctx.Values().Get("profile")
-		profile := u.(session.UserProfile)
+		language := ctx.GetHeader("Accept-Language")
+		if strings.Contains(language, "zh-CN") {
+			req.Language = "zh-CN"
+		} else {
+			req.Language = "en-US"
+		}
+
 		//tx
 		tx, err := server.DB().Begin(true)
 		_ = tx.Rollback()
@@ -126,13 +129,8 @@ func (h *Handler) CallbackSso() iris.Handler {
 			ctx.Values().Set("message", err.Error())
 			return
 		}
-		req.CreatedBy = profile.Name
-		if req.Language == "" {
-			req.Language = profile.Language
-		}
 		req.Type = v1User.LOCAL
 		ctx.Values().Set("data", &req.User)
-		fmt.Println("profile", profile)
 	}
 }
 
