@@ -131,7 +131,7 @@ export default {
       font-size: 22px;
       letter-spacing: 0;
       text-align: left;
-      color: #8ae9fa;
+      color: #000000;
 
       @media only screen and (max-width: 1280px) {
         margin-top: 20px;

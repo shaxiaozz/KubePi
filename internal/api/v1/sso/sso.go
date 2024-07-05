@@ -111,6 +111,13 @@ func (h *Handler) LoginSso() iris.Handler {
 
 func (h *Handler) CallbackSso() iris.Handler {
 	return func(ctx *context.Context) {
+		ssos, err := h.ssoService.List(common.DBOptions{})
+		if err != nil {
+			ctx.StatusCode(iris.StatusInternalServerError)
+			ctx.Values().Set("message", err.Error())
+			return
+		}
+
 		r := ctx.Request()
 		language := ctx.GetHeader("Accept-Language")
 		if strings.Contains(language, "zh-CN") {
@@ -119,9 +126,26 @@ func (h *Handler) CallbackSso() iris.Handler {
 			language = "en-US"
 		}
 		code := r.URL.Query().Get("code")
-		if _, err := h.ssoService.OpenID(&v1Sso.OpenID{IsConfig: false, Code: code, Language: language}); err != nil {
+
+		// 目前只支持OpenID
+		switch ssos[0].Protocol {
+		case "openid":
+			openid := &v1Sso.OpenID{
+				ClientId:     ssos[0].ClientId,
+				ClientSecret: ssos[0].ClientSecret,
+				IssuerURL:    ssos[0].InterfaceAddress,
+				IsConfig:     false,
+				Code:         code,
+				Language:     language,
+			}
+			if _, err := h.ssoService.OpenID(openid); err != nil {
+				ctx.StatusCode(iris.StatusInternalServerError)
+				ctx.Values().Set("message", err.Error())
+				return
+			}
+		default:
 			ctx.StatusCode(iris.StatusInternalServerError)
-			ctx.Values().Set("message", err.Error())
+			ctx.Values().Set("message", "目前只支持OpenID")
 			return
 		}
 	}
