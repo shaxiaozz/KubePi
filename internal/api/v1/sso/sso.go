@@ -1,7 +1,9 @@
 package sso
 
 import (
+	v1Session "github.com/KubeOperator/kubepi/internal/api/v1/session"
 	v1Sso "github.com/KubeOperator/kubepi/internal/model/v1/sso"
+	"github.com/KubeOperator/kubepi/internal/server"
 	"github.com/KubeOperator/kubepi/internal/service/v1/common"
 	"github.com/KubeOperator/kubepi/internal/service/v1/sso"
 	"github.com/kataras/iris/v12"
@@ -12,6 +14,8 @@ import (
 type Handler struct {
 	ssoService sso.Service
 }
+
+var oauth2Config = &v1Sso.OpenID{}
 
 func NewHandler() *Handler {
 	return &Handler{
@@ -75,32 +79,19 @@ func (h *Handler) LoginSso() iris.Handler {
 		}
 
 		// 根据协议设置重定向URL
-		r := ctx.Request()
-		path := strings.Replace(ctx.Path(), "login", "callback", -1)
-		redirectURL := ""
-		if strings.HasPrefix(strings.ToLower(r.Proto), "https") {
-			redirectURL = "https://" + r.Host + path
-		} else if strings.HasPrefix(strings.ToLower(r.Proto), "http") {
-			redirectURL = "http://" + r.Host + path
-		}
+		referer := ctx.GetHeader("Referer")
+		redirectURL := strings.Replace(referer, "sso", "api/v1/sso/callback", -1)
 
 		// 目前只支持OpenID
 		switch ssos[0].Protocol {
 		case "openid":
-			openid := &v1Sso.OpenID{
-				ClientId:     ssos[0].ClientId,
-				ClientSecret: ssos[0].ClientSecret,
-				RedirectURL:  redirectURL,
-				IssuerURL:    ssos[0].InterfaceAddress,
-				IsConfig:     true,
-			}
-			oauth2Config, err := h.ssoService.OpenID(openid)
+			oauth2Config, err = h.ssoService.OpenIDConfig(ssos[0].ClientId, ssos[0].ClientSecret, ssos[0].InterfaceAddress, redirectURL)
 			if err != nil {
 				ctx.StatusCode(iris.StatusInternalServerError)
 				ctx.Values().Set("message", err.Error())
 				return
 			}
-			ctx.Redirect(oauth2Config.AuthCodeURL("state"), iris.StatusFound)
+			ctx.Redirect(oauth2Config.Oauth2Config.AuthCodeURL("state"), iris.StatusFound)
 		default:
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", "目前只支持OpenID")
@@ -130,19 +121,34 @@ func (h *Handler) CallbackSso() iris.Handler {
 		// 目前只支持OpenID
 		switch ssos[0].Protocol {
 		case "openid":
-			openid := &v1Sso.OpenID{
-				ClientId:     ssos[0].ClientId,
-				ClientSecret: ssos[0].ClientSecret,
-				IssuerURL:    ssos[0].InterfaceAddress,
-				IsConfig:     false,
-				Code:         code,
-				Language:     language,
-			}
-			if _, err := h.ssoService.OpenID(openid); err != nil {
+			oauth2Config.Code = code
+			oauth2Config.Language = language
+			userProfile, err := h.ssoService.OpenID(oauth2Config, common.DBOptions{})
+			if err != nil {
 				ctx.StatusCode(iris.StatusInternalServerError)
 				ctx.Values().Set("message", err.Error())
 				return
 			}
+			// 默认为Session
+			sId := ctx.GetCookie(server.SessionCookieName)
+			if sId != "" {
+				ctx.RemoveCookie(server.SessionCookieName)
+				ctx.Request().Header.Del("Cookie")
+			}
+			sess := server.SessionMgr.Start(ctx)
+			ctx.SetCookieKV(server.SessionCookieName, sess.ID())
+			sess.Set("profile", userProfile)
+
+			redirectURL := ""
+			if strings.HasPrefix(strings.ToLower(r.Proto), "https") {
+				redirectURL = "https://" + r.Host
+			} else if strings.HasPrefix(strings.ToLower(r.Proto), "http") {
+				redirectURL = "http://" + r.Host
+			}
+			ctx.Redirect(redirectURL, iris.StatusFound)
+			handler := v1Session.NewHandler()
+			go handler.SaveLoginLog(ctx, userProfile.Name)
+			//ctx.Values().Set("data", userProfile)
 		default:
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", "目前只支持OpenID")

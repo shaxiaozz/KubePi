@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	v1Session "github.com/KubeOperator/kubepi/internal/api/v1/session"
 	v1 "github.com/KubeOperator/kubepi/internal/model/v1"
 	v1Role "github.com/KubeOperator/kubepi/internal/model/v1/role"
 	v1Sso "github.com/KubeOperator/kubepi/internal/model/v1/sso"
@@ -28,11 +29,15 @@ type Service interface {
 	Create(sso *v1Sso.Sso, options common.DBOptions) error
 	Update(id string, sso *v1Sso.Sso, options common.DBOptions) error
 	Status(options common.DBOptions) bool
-	OpenID(openid *v1Sso.OpenID) (*oauth2.Config, error)
+	OpenID(openid *v1Sso.OpenID, options common.DBOptions) (v1Session.UserProfile, error)
+	OpenIDConfig(clientId, clientSecret, issuerURL, redirectURL string) (*v1Sso.OpenID, error)
 }
 
 func NewService() Service {
-	return &service{}
+	return &service{
+		userService:        user.NewService(),
+		roleBindingService: rolebinding.NewService(),
+	}
 }
 
 type service struct {
@@ -126,45 +131,26 @@ func (s *service) GetById(id string, options common.DBOptions) (*v1Sso.Sso, erro
 	return &sso, nil
 }
 
-func (s *service) OpenID(openid *v1Sso.OpenID) (*oauth2.Config, error) {
-	ctx := context.Background()
-	provider, err := oidc.NewProvider(ctx, openid.IssuerURL)
+func (s *service) OpenID(openid *v1Sso.OpenID, options common.DBOptions) (v1Session.UserProfile, error) {
+	token, err := openid.Oauth2Config.Exchange(openid.Ctx, openid.Code)
 	if err != nil {
-		return nil, err
+		return v1Session.UserProfile{}, errors.New("交换Token失败: " + err.Error())
 	}
 
-	oauth2Config := &oauth2.Config{
-		ClientID:     openid.ClientId,
-		ClientSecret: openid.ClientSecret,
-		Endpoint:     provider.Endpoint(),
-		RedirectURL:  openid.RedirectURL,
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
-	}
-
-	if openid.IsConfig {
-		return oauth2Config, nil
-	}
-
-	// 用 code 换取 token
-	token, err := oauth2Config.Exchange(ctx, openid.Code)
+	userInfo, err := openid.OidcProvider.UserInfo(openid.Ctx, oauth2.StaticTokenSource(token))
 	if err != nil {
-		return nil, errors.New("交换Token失败: " + err.Error())
-	}
-
-	// 使用 token 获取用户信息
-	userInfo, err := provider.UserInfo(ctx, oauth2.StaticTokenSource(token))
-	if err != nil {
-		return nil, errors.New("获取用户信息失败: " + err.Error())
+		return v1Session.UserProfile{}, errors.New("获取用户信息失败: " + err.Error())
 	}
 	// 获取用户名
 	var claims struct {
 		PreferredUsername string `json:"preferred_username"`
 	}
-	if err := userInfo.Claims(&claims); err != nil {
-		return nil, err
+	if err = userInfo.Claims(&claims); err != nil {
+		return v1Session.UserProfile{}, err
 	}
 
-	localUser, err := s.userService.GetByNameOrEmail(userInfo.Email, openid.Options)
+	// 初始化用户
+	_, err = s.userService.GetByNameOrEmail(userInfo.Email, options)
 	if err != nil {
 		if errors.Is(err, storm.ErrNotFound) {
 			// 创建本地账号，密码默认设置为`@=7kvi-$l*Pj+,s`，默认不开启MFA
@@ -188,10 +174,13 @@ func (s *service) OpenID(openid *v1Sso.OpenID) (*oauth2.Config, error) {
 					Enable: false,
 				},
 			}
-			tx, _ := server.DB().Begin(true)
-			if err := s.userService.Create(userProfile, common.DBOptions{DB: tx}); err != nil {
+			tx, err := server.DB().Begin(true)
+			if err != nil {
+				return v1Session.UserProfile{}, err
+			}
+			if err = s.userService.Create(userProfile, common.DBOptions{DB: tx}); err != nil {
 				_ = tx.Rollback()
-				return nil, err
+				return v1Session.UserProfile{}, err
 			}
 
 			// 用户角色默认为ReadOnly
@@ -210,14 +199,66 @@ func (s *service) OpenID(openid *v1Sso.OpenID) (*oauth2.Config, error) {
 				},
 				RoleRef: "ReadOnly",
 			}
-			if err := s.roleBindingService.CreateRoleBinding(&binding, common.DBOptions{DB: tx}); err != nil {
+			if err = s.roleBindingService.CreateRoleBinding(&binding, common.DBOptions{DB: tx}); err != nil {
 				_ = tx.Rollback()
-				return nil, err
+				return v1Session.UserProfile{}, err
 			}
-			fmt.Println("SSO用户" + localUser.Name + "不存在，已自动创建本地账号")
-			return nil, nil
+			_ = tx.Commit()
+			fmt.Println("SSO用户" + claims.PreferredUsername + "不存在，已自动创建本地账号")
+		} else {
+			return v1Session.UserProfile{}, errors.New(fmt.Sprintf("query user %s failed ,: %s", claims.PreferredUsername, err.Error()))
 		}
+	}
+
+	// 设置profile
+	return s.localProfile(claims.PreferredUsername, userInfo.Email)
+}
+
+func (s *service) OpenIDConfig(clientId, clientSecret, issuerURL, redirectURL string) (*v1Sso.OpenID, error) {
+	ctx := context.Background()
+	provider, err := oidc.NewProvider(ctx, issuerURL)
+	if err != nil {
 		return nil, err
 	}
-	return nil, err
+
+	return &v1Sso.OpenID{
+		Oauth2Config: &oauth2.Config{
+			ClientID:     clientId,
+			ClientSecret: clientSecret,
+			Endpoint:     provider.Endpoint(),
+			RedirectURL:  redirectURL,
+			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+		},
+		OidcProvider: provider,
+		Ctx:          ctx,
+	}, nil
+}
+
+func (s *service) localProfile(username, email string) (v1Session.UserProfile, error) {
+	u, err := s.userService.GetByNameOrEmail(email, common.DBOptions{})
+	if err != nil {
+		if errors.Is(err, storm.ErrNotFound) {
+			return v1Session.UserProfile{}, errors.New("username or password error")
+		}
+		return v1Session.UserProfile{}, errors.New(fmt.Sprintf("query user %s failed ,: %s", username, err.Error()))
+	}
+
+	handler := v1Session.NewHandler()
+	permissions, err := handler.AggregateResourcePermissions(username)
+	if err != nil {
+		return v1Session.UserProfile{}, errors.New(err.Error())
+	}
+	return v1Session.UserProfile{
+		Name:                u.Name,
+		NickName:            u.NickName,
+		Email:               u.Email,
+		Language:            u.Language,
+		ResourcePermissions: permissions,
+		IsAdministrator:     u.IsAdmin,
+		Mfa: v1Session.Mfa{
+			Secret:   u.Mfa.Secret,
+			Enable:   u.Mfa.Enable,
+			Approved: false,
+		},
+	}, nil
 }

@@ -4,7 +4,6 @@ import (
 	goContext "context"
 	"errors"
 	"fmt"
-	"github.com/KubeOperator/kubepi/internal/service/v1/sso"
 	"strings"
 	"time"
 
@@ -41,7 +40,6 @@ type Handler struct {
 	clusterService     cluster.Service
 	rolebindingService rolebinding.Service
 	ldapService        ldap.Service
-	ssoService         sso.Service
 	jwtSigner          *jwt.Signer
 }
 
@@ -52,7 +50,6 @@ func NewHandler() *Handler {
 		roleService:        role.NewService(),
 		rolebindingService: rolebinding.NewService(),
 		ldapService:        ldap.NewService(),
-		ssoService:         sso.NewService(),
 		jwtSigner:          jwt.NewSigner(jwt.HS256, server.Config().Spec.Jwt.Key, jwtMaxAge),
 	}
 }
@@ -132,7 +129,7 @@ func (h *Handler) Login() iris.Handler {
 			}
 		}
 
-		permissions, err := h.aggregateResourcePermissions(loginCredential.Username)
+		permissions, err := h.AggregateResourcePermissions(loginCredential.Username)
 		if err != nil {
 			ctx.StatusCode(iris.StatusInternalServerError)
 			ctx.Values().Set("message", err.Error())
@@ -176,12 +173,12 @@ func (h *Handler) Login() iris.Handler {
 		}
 
 		ctx.StatusCode(iris.StatusOK)
-		go saveLoginLog(ctx, profile.Name)
+		go h.SaveLoginLog(ctx, profile.Name)
 		ctx.Values().Set("data", profile)
 	}
 }
 
-func saveLoginLog(ctx *context.Context, userName string) {
+func (h *Handler) SaveLoginLog(ctx *context.Context, userName string) {
 	var logItem v1System.LoginLog
 	logItem.UserName = userName
 	logItem.Ip = ctx.RemoteAddr()
@@ -195,7 +192,7 @@ func saveLoginLog(ctx *context.Context, userName string) {
 	systemService.CreateLoginLog(&logItem, common.DBOptions{})
 }
 
-func (h *Handler) aggregateResourcePermissions(name string) (map[string][]string, error) {
+func (h *Handler) AggregateResourcePermissions(name string) (map[string][]string, error) {
 	userRoleBindings, err := h.rolebindingService.GetRoleBindingBySubject(v1Role.Subject{
 		Kind: "User",
 		Name: name,
@@ -290,7 +287,7 @@ func (h *Handler) GetProfile() iris.Handler {
 			IsAdministrator: user.IsAdmin,
 		}
 		if !user.IsAdmin {
-			permissions, err := h.aggregateResourcePermissions(p.Name)
+			permissions, err := h.AggregateResourcePermissions(p.Name)
 			if err != nil {
 				ctx.StatusCode(iris.StatusInternalServerError)
 				ctx.Values().Set("message", err.Error())

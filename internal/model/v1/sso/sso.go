@@ -1,8 +1,10 @@
 package sso
 
 import (
+	"context"
 	v1 "github.com/KubeOperator/kubepi/internal/model/v1"
-	"github.com/KubeOperator/kubepi/internal/service/v1/common"
+	"github.com/coreos/go-oidc"
+	"golang.org/x/oauth2"
 )
 
 type Sso struct {
@@ -16,12 +18,9 @@ type Sso struct {
 }
 
 type OpenID struct {
-	ClientId     string
-	ClientSecret string
-	RedirectURL  string
-	IssuerURL    string
-	IsConfig     bool
 	Code         string
 	Language     string
-	Options      common.DBOptions
+	Oauth2Config *oauth2.Config
+	OidcProvider *oidc.Provider
+	Ctx          context.Context
 }

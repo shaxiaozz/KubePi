@@ -56,6 +56,7 @@ export default {
     redirectSso () {
       clearInterval(this.intervalId)
       window.location.href = '/kubepi'+ssoLogin()
+      console.log("重定向完成")
       // 这里可以添加重定向逻辑，例如：
       //window.location.href = "https://www.google.com.hk/";
     },
